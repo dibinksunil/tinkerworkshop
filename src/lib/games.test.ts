@@ -45,6 +45,33 @@ describe('games data-access helpers', () => {
         expect(all[0].publisher).toEqual({ id: expect.any(Number), name: 'Pub One' });
     });
 
+    it('supports descending title ordering', async () => {
+        await seedGames(db, 3);
+        const all = await getAllGames(db, 'title-desc');
+        expect(all.map((g) => g.title)).toEqual(['Game 03', 'Game 02', 'Game 01']);
+    });
+
+    it('orders games by rating with unrated entries last', async () => {
+        const [category] = await db
+            .insert(categories)
+            .values({ name: 'Strategy', description: 'cat' })
+            .returning({ id: categories.id });
+        const [publisher] = await db
+            .insert(publishers)
+            .values({ name: 'Pub One', description: 'pub' })
+            .returning({ id: publishers.id });
+
+        await db.insert(games).values([
+            { title: 'Alpha', description: 'A', starRating: 4.8, categoryId: category.id, publisherId: publisher.id },
+            { title: 'Beta', description: 'B', starRating: null, categoryId: category.id, publisherId: publisher.id },
+            { title: 'Gamma', description: 'C', starRating: 4.2, categoryId: category.id, publisherId: publisher.id },
+        ]);
+
+        const all = await getAllGames(db, 'rating-desc');
+        expect(all.map((g) => g.title)).toEqual(['Alpha', 'Gamma', 'Beta']);
+        expect(all[2].starRating).toBeNull();
+    });
+
     it('returns all game ids ordered by title', async () => {
         await seedGames(db, 3);
         const ids = await getAllGameIds(db);

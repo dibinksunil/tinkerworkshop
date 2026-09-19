@@ -1,7 +1,9 @@
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, desc, sql } from 'drizzle-orm';
 import type { Database } from './db';
 import { games, categories, publishers } from '../../db/schema';
 import type { Game } from '../types/game';
+
+export type GameSortOrder = 'title-asc' | 'title-desc' | 'rating-desc';
 
 const gameSelection = {
     id: games.id,
@@ -50,15 +52,33 @@ function baseGamesQuery(db: Database) {
         .leftJoin(publishers, eq(games.publisherId, publishers.id));
 }
 
-/** All games ordered by title. */
-export async function getAllGames(db: Database): Promise<Game[]> {
-    const rows = await baseGamesQuery(db).orderBy(asc(games.title));
+function applySortToGamesQuery(query: ReturnType<typeof baseGamesQuery>, sort: GameSortOrder) {
+    switch (sort) {
+        case 'title-desc':
+            return query.orderBy(desc(games.title), asc(games.id));
+        case 'rating-desc':
+            return query.orderBy(
+                sql<number>`CASE WHEN ${games.starRating} IS NULL THEN 1 ELSE 0 END`,
+                desc(games.starRating),
+                asc(games.title),
+                asc(games.id),
+            );
+        case 'title-asc':
+        default:
+            return query.orderBy(asc(games.title), asc(games.id));
+    }
+}
+
+/** All games ordered according to the selected sort mode. */
+export async function getAllGames(db: Database, sort: GameSortOrder = 'title-asc'): Promise<Game[]> {
+    const rows = await applySortToGamesQuery(baseGamesQuery(db), sort);
     return rows.map(mapGame);
 }
 
-/** All game ids ordered by title. */
-export async function getAllGameIds(db: Database): Promise<number[]> {
-    const rows = await db.select({ id: games.id }).from(games).orderBy(asc(games.title));
+/** All game ids ordered according to the selected sort mode. */
+export async function getAllGameIds(db: Database, sort: GameSortOrder = 'title-asc'): Promise<number[]> {
+    const query = db.select({ id: games.id }).from(games);
+    const rows = await applySortToGamesQuery(query as ReturnType<typeof baseGamesQuery>, sort);
     return rows.map((row) => row.id);
 }
 
