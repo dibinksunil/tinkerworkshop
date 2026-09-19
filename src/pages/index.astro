@@ -4,11 +4,14 @@ import GameCard from '../components/GameCard.astro';
 import PageHero from '../components/PageHero.astro';
 import EmptyState from '../components/EmptyState.astro';
 import { getDatabase } from '../lib/db';
-import { getAllGames } from '../lib/games';
+import { getAllGames, type GameSortOrder } from '../lib/games';
 
 export const prerender = true;
 
-const games = await getAllGames(getDatabase());
+const requestedSort = Astro.url.searchParams.get('sort');
+const selectedSort: GameSortOrder =
+    requestedSort === 'title-desc' || requestedSort === 'rating-desc' ? requestedSort : 'title-asc';
+const games = await getAllGames(getDatabase(), selectedSort);
 ---
 
 <Layout title="Tailspin Toys - Crowdfunding your new favorite game!">
@@ -19,7 +22,25 @@ const games = await getAllGames(getDatabase());
     />
 
     <div>
-      <h2 class="text-2xl font-medium mb-6 text-slate-100">Featured Games</h2>
+      <div class="mb-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+        <h2 class="text-2xl font-medium text-slate-100">Featured Games</h2>
+
+        <div class="flex items-center gap-3">
+          <label for="game-sort" class="text-sm font-medium text-slate-200">Sort games</label>
+          <select
+            id="game-sort"
+            name="sort"
+            data-testid="game-sort-select"
+            aria-label="Sort games"
+            class="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={selectedSort}
+          >
+            <option value="title-asc" selected={selectedSort === 'title-asc'}>Title: A–Z</option>
+            <option value="title-desc" selected={selectedSort === 'title-desc'}>Title: Z–A</option>
+            <option value="rating-desc" selected={selectedSort === 'rating-desc'}>Star rating: highest first</option>
+          </select>
+        </div>
+      </div>
 
       {games.length === 0 ? (
         <EmptyState text="No games available at the moment." />
@@ -31,3 +52,56 @@ const games = await getAllGames(getDatabase());
     </div>
   </div>
 </Layout>
+
+<script>
+  const sortSelect = document.getElementById('game-sort');
+  const gamesGrid = document.querySelector('[data-testid="games-grid"]');
+
+  if (sortSelect instanceof HTMLSelectElement && gamesGrid) {
+    const compareTitles = (firstTitle: string, secondTitle: string) =>
+      firstTitle.localeCompare(secondTitle, undefined, { sensitivity: 'base' });
+
+    const updateSortOrder = (sortMode: string) => {
+      const cards = Array.from(gamesGrid.children) as HTMLElement[];
+
+      cards.sort((firstCard, secondCard) => {
+        const firstTitle = firstCard.dataset.gameTitle ?? '';
+        const secondTitle = secondCard.dataset.gameTitle ?? '';
+        const titleComparison = compareTitles(firstTitle, secondTitle);
+
+        if (sortMode === 'title-desc') {
+          return titleComparison * -1;
+        }
+
+        if (sortMode === 'rating-desc') {
+          const firstRating = firstCard.dataset.gameRating ? Number(firstCard.dataset.gameRating) : Number.NEGATIVE_INFINITY;
+          const secondRating = secondCard.dataset.gameRating ? Number(secondCard.dataset.gameRating) : Number.NEGATIVE_INFINITY;
+
+          if (firstRating === secondRating) {
+            return titleComparison;
+          }
+
+          return secondRating - firstRating;
+        }
+
+        return titleComparison;
+      });
+
+      cards.forEach((card) => gamesGrid.append(card));
+    };
+
+    sortSelect.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLSelectElement)) {
+        return;
+      }
+
+      const url = new URL(window.location.href);
+      url.searchParams.set('sort', target.value);
+      window.history.replaceState({}, '', url);
+      updateSortOrder(target.value);
+    });
+
+    updateSortOrder(sortSelect.value);
+  }
+</script>

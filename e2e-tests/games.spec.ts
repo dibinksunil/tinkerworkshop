@@ -24,6 +24,40 @@ test.describe('Game Listing and Navigation', () => {
     });
   });
 
+  test('should allow sorting games by title and star rating', async ({ page }) => {
+    await test.step('Navigate to homepage and inspect initial ordering', async () => {
+      await page.goto('/');
+      const titles = await page.getByTestId('game-card').evaluateAll((cards) =>
+        cards.map((card) => (card as HTMLElement).dataset.gameTitle ?? '')
+      );
+      expect(titles).toEqual([...titles].sort((first, second) => first.localeCompare(second)));
+    });
+
+    await test.step('Sort by title descending', async () => {
+      const sortSelect = page.getByTestId('game-sort-select');
+      await sortSelect.selectOption('title-desc');
+
+      const titles = await page.getByTestId('game-card').evaluateAll((cards) =>
+        cards.map((card) => (card as HTMLElement).dataset.gameTitle ?? '')
+      );
+      expect(titles).toEqual([...titles].sort((first, second) => second.localeCompare(first)));
+    });
+
+    await test.step('Sort by star rating descending', async () => {
+      const sortSelect = page.getByTestId('game-sort-select');
+      await sortSelect.selectOption('rating-desc');
+
+      const ratings = await page.getByTestId('game-card').evaluateAll((cards) =>
+        cards.map((card) => {
+          const rawRating = (card as HTMLElement).dataset.gameRating;
+          return rawRating ? Number(rawRating) : Number.NEGATIVE_INFINITY;
+        })
+      );
+
+      expect(ratings).toEqual([...ratings].sort((first, second) => second - first));
+    });
+  });
+
   test('should navigate to correct game details page when clicking on a game', async ({ page }) => {
     let gameId: string | null;
     let gameTitle: string | null;
